@@ -16,6 +16,8 @@
 int quiet; // stores whether we can print to console or not
 double stack[256]; // allow upto 256 numbers on our stack
 int top; // tells us what offset the top of the stack is
+
+//https://en.wikipedia.org/wiki/Stack-oriented_programming_language
  
 void push(double d){ // stores a number onto the top of the stack
   if(top>sizeof(stack)){ // test if we have too many numbers on the stack
@@ -77,46 +79,65 @@ int isOp(char c){ // tests if the character is a recognized binary operator
   return c=='+'||c=='-'||c=='/'||c=='*';
 }
 
+int parseError(char c,ssize_t i){
+  fprintf(stderr,"Error: unexpected char '%c' at position %ld\n",c,i);
+  top=0;
+  return 0;
+}
+/*
+  the infix to postix parser has the following states, with start state 0:
+  state allowedChars  nextState
+  0     "0123456789"  1
+  0     "("           0
+  1     ")"           1
+  1     "+-/*"        0
+*/
 // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
 ssize_t infixToPostfix(char*s,ssize_t n,char*postfix){
   char c;
+  int state=0;
   ssize_t i,j=0;
   for(i=0;i<n;i++){
     c=s[i];
     if(isspace(c))
       ;
-    else if(c=='(')
+    else if(c=='('){
+      if(state!=0)
+        return parseError(c,i);
       push(c);
+    }
     else if(isdigit(c)){
-      if(i&&isdigit(s[i-1])){
-        printf("Error: juxtaposed digits ('%c') found at %ld\n",c,i);
-        top=0;
-        return 0;
-      }
+      if(state!=0)
+        return parseError(c,i);
       postfix[j++]=c;
+      state=1;
     }
     else if(c==')'){
+      if(state!=1)
+        return parseError(c,i);
       while(top&&peek()!='(')
         postfix[j++]=pop();
       if(top==0){
-        printf("Error: unmatched ')'\n");
+        fprintf(stderr,"Error: unmatched ')'\n");
         return 0;
       }
       pop(); // pops the '('
-      // todo: check next char here, must be op
     }
     else if(isOp(c)){
+      if(state!=1)
+        return parseError(c,i);
       if(i&&isOp(s[i-1])){
-        printf("Error: juxtaposed operation ('%c') found at %ld\n",c,i);
+        fprintf(stderr,"Error: juxtaposed operation ('%c') found at %ld\n",c,i);
         top=0;
         return 0;
       }
       while(top&&precedence(peek())>=precedence(c))
         postfix[j++]=pop();
       push(c);
+      state=0;
     }
     else{
-      printf("Error: bad character '%c' at position %ld.\nCheck that your input is ascii rather than unicode.\n",c,i);
+      fprintf(stderr,"Error: bad character '%c' at position %ld.\nCheck that your input is ascii rather than unicode.\n",c,i);
       top=0;
       return 0;
     }
@@ -124,7 +145,7 @@ ssize_t infixToPostfix(char*s,ssize_t n,char*postfix){
   while(top){
     c=pop();
     if(c=='('){
-      printf("Error: unmatched '('\n");
+      fprintf(stderr,"Error: unmatched '('\n");
       top=0;
       return 0;
     }
@@ -172,6 +193,7 @@ void repl(){ // read eval print loop
   if(!quiet) // if we have a console
     printf("\n"); // print a new line
 }
+
 
 int main(int argc,char*argv[]){ // entry point to the program
   quiet=!isatty(STDIN_FILENO); // check whether there is a console attached
